@@ -67,3 +67,41 @@ export function sendPrivateReply(
 export function postPublicReply(accessToken: string, commentId: string, message: string) {
   return graphApiPost(`${commentId}/replies`, accessToken, { message });
 }
+
+export interface InstagramMediaItem {
+  id: string;
+  caption?: string;
+  media_type?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink?: string;
+  timestamp?: string;
+}
+
+// Lista os posts/reels mais recentes da conta, usados no painel pra selecao visual
+// do targetMediaId de uma automation (em vez de colar o ID manualmente).
+export async function listRecentMedia(
+  accessToken: string,
+  igUserId: string,
+  limit = 25,
+): Promise<InstagramMediaItem[]> {
+  const params = new URLSearchParams({
+    fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp",
+    access_token: accessToken,
+    limit: String(limit),
+  });
+
+  const res = await fetch(`${GRAPH_API_BASE}/${igUserId}/media?${params.toString()}`);
+
+  const data = (await res.json().catch(() => ({}))) as GraphApiErrorBody & {
+    data?: InstagramMediaItem[];
+  };
+
+  if (!res.ok) {
+    const message =
+      data?.error?.message ?? `Graph API request failed with status ${res.status}`;
+    throw new GraphApiError(message, res.status, data);
+  }
+
+  return data.data ?? [];
+}

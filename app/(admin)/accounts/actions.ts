@@ -64,13 +64,21 @@ export async function createIgAccount(
   }
 
   const db = getDb();
-  await db.insert(igAccounts).values({
-    igUserId: input.igUserId,
-    username: input.username,
-    accessToken: input.accessTokenRaw === "" ? null : input.accessTokenRaw,
-    tokenExpiresAt: input.tokenExpiresAt,
-    active: input.active,
-  });
+  try {
+    await db.insert(igAccounts).values({
+      igUserId: input.igUserId,
+      username: input.username,
+      accessToken: input.accessTokenRaw === "" ? null : input.accessTokenRaw,
+      tokenExpiresAt: input.tokenExpiresAt,
+      active: input.active,
+    });
+  } catch (err) {
+    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+      return { error: "Essa conta (IG User ID) já está cadastrada." };
+    }
+    console.error("Falha ao criar ig_account", err);
+    return { error: "Não foi possível salvar a conta. Tente novamente." };
+  }
 
   revalidatePath("/accounts");
   revalidatePath("/automations");
@@ -94,21 +102,30 @@ export async function updateIgAccount(
   }
 
   const db = getDb();
-  const [updated] = await db
-    .update(igAccounts)
-    .set({
-      igUserId: input.igUserId,
-      username: input.username,
-      // campo em branco no formulário mantém o token atual (nunca exibido de volta na UI)
-      ...(input.accessTokenRaw !== ""
-        ? { accessToken: input.accessTokenRaw }
-        : {}),
-      tokenExpiresAt: input.tokenExpiresAt,
-      active: input.active,
-      updatedAt: new Date(),
-    })
-    .where(eq(igAccounts.id, id))
-    .returning({ id: igAccounts.id });
+  let updated: { id: string } | undefined;
+  try {
+    [updated] = await db
+      .update(igAccounts)
+      .set({
+        igUserId: input.igUserId,
+        username: input.username,
+        // campo em branco no formulário mantém o token atual (nunca exibido de volta na UI)
+        ...(input.accessTokenRaw !== ""
+          ? { accessToken: input.accessTokenRaw }
+          : {}),
+        tokenExpiresAt: input.tokenExpiresAt,
+        active: input.active,
+        updatedAt: new Date(),
+      })
+      .where(eq(igAccounts.id, id))
+      .returning({ id: igAccounts.id });
+  } catch (err) {
+    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+      return { error: "Essa conta (IG User ID) já está cadastrada." };
+    }
+    console.error("Falha ao atualizar ig_account", err);
+    return { error: "Não foi possível salvar a conta. Tente novamente." };
+  }
 
   if (!updated) {
     return { error: "Conta não encontrada." };

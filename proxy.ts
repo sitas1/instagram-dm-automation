@@ -7,6 +7,7 @@ export const config = {
     "/contacts/:path*",
     "/activity/:path*",
     "/accounts/:path*",
+    "/api/accounts/:path*",
   ],
 };
 
