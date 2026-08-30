@@ -1,6 +1,8 @@
 import { AutomationForm } from "../_components/AutomationForm";
 import { createAutomation } from "../actions";
 
+export const dynamic = "force-dynamic";
+
 export default function NewAutomationPage() {
   return (
     <div className="flex flex-col gap-6">

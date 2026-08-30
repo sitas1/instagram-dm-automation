@@ -11,8 +11,32 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+export const igAccounts = pgTable(
+  "ig_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Instagram-scoped Business Account ID
+    igUserId: text("ig_user_id").notNull(),
+    username: text("username"),
+    // token de longa duracao dessa conta (gerenciado pelo painel admin)
+    accessToken: text("access_token"),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("ig_accounts_ig_user_id_idx").on(table.igUserId)],
+);
+
 export const automations = pgTable("automations", {
   id: uuid("id").primaryKey().defaultRandom(),
+  igAccountId: uuid("ig_account_id")
+    .notNull()
+    .references(() => igAccounts.id),
   name: text("name").notNull(),
   // null targetMediaId = applies to any post/reel on the account
   targetMediaId: text("target_media_id"),
@@ -38,6 +62,9 @@ export const contacts = pgTable(
   "contacts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    igAccountId: uuid("ig_account_id")
+      .notNull()
+      .references(() => igAccounts.id),
     igUserId: text("ig_user_id").notNull(),
     igUsername: text("ig_username"),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
@@ -45,20 +72,32 @@ export const contacts = pgTable(
       .defaultNow(),
     lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
   },
-  (table) => [uniqueIndex("contacts_ig_user_id_idx").on(table.igUserId)],
+  (table) => [
+    // a mesma pessoa pode comentar em contas diferentes -- sao contatos distintos,
+    // cada um com seu proprio cooldown/oncePerContact
+    uniqueIndex("contacts_ig_account_id_ig_user_id_idx").on(
+      table.igAccountId,
+      table.igUserId,
+    ),
+  ],
 );
 
 export const activityLog = pgTable(
   "activity_log",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // sempre preenchido: a conta ja e resolvida antes de qualquer linha ser gravada
+    // (eventos de conta nao cadastrada/inativa sao descartados antes de chegar aqui)
+    igAccountId: uuid("ig_account_id")
+      .notNull()
+      .references(() => igAccounts.id),
     automationId: uuid("automation_id").references(() => automations.id, {
       onDelete: "set null",
     }),
     contactId: uuid("contact_id").references(() => contacts.id, {
       onDelete: "set null",
     }),
-    // comment_received | dm_sent | dm_failed | reply_posted | reply_failed | cooldown_skipped
+    // comment_received | dm_sent | dm_failed | reply_posted | reply_failed | cooldown_skipped | processing_error
     eventType: text("event_type").notNull(),
     igCommentId: text("ig_comment_id"),
     commentText: text("comment_text"),

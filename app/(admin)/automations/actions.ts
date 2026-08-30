@@ -21,12 +21,17 @@ function optionalStr(formData: FormData, key: string) {
 }
 
 function parseAutomationInput(formData: FormData) {
+  const igAccountId = requiredStr(formData, "igAccountId");
   const name = requiredStr(formData, "name");
   const dmMessage = requiredStr(formData, "dmMessage");
   const targetMediaId = optionalStr(formData, "targetMediaId");
   const targetMediaCaption = optionalStr(formData, "targetMediaCaption");
   const keyword = optionalStr(formData, "keyword");
   const publicReplyMessage = optionalStr(formData, "publicReplyMessage");
+
+  if (!UUID_PATTERN.test(igAccountId)) {
+    throw new Error("Selecione uma conta do Instagram válida.");
+  }
 
   if (name.length < 1 || name.length > 255) {
     throw new Error("Nome deve ter entre 1 e 255 caracteres.");
@@ -64,6 +69,7 @@ function parseAutomationInput(formData: FormData) {
   }
 
   return {
+    igAccountId,
     name,
     dmMessage,
     targetMediaId,
@@ -94,6 +100,21 @@ export async function updateAutomation(id: string, formData: FormData) {
   const input = parseAutomationInput(formData);
 
   const db = getDb();
+
+  const [existing] = await db
+    .select({ igAccountId: automations.igAccountId })
+    .from(automations)
+    .where(eq(automations.id, id))
+    .limit(1);
+
+  if (!existing) {
+    throw new Error("Automação não encontrada.");
+  }
+
+  if (existing.igAccountId !== input.igAccountId) {
+    throw new Error("Não é possível trocar a conta de uma automação existente.");
+  }
+
   await db
     .update(automations)
     .set({ ...input, updatedAt: new Date() })

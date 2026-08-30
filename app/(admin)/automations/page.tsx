@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/src/db";
-import { automations } from "@/src/db/schema";
+import { automations, igAccounts } from "@/src/db/schema";
 import { toggleAutomationActive } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +9,18 @@ export const dynamic = "force-dynamic";
 export default async function AutomationsPage() {
   const db = getDb();
   const rows = await db
-    .select()
+    .select({
+      id: automations.id,
+      name: automations.name,
+      keyword: automations.keyword,
+      targetMediaId: automations.targetMediaId,
+      targetMediaCaption: automations.targetMediaCaption,
+      active: automations.active,
+      accountUsername: igAccounts.username,
+      accountIgUserId: igAccounts.igUserId,
+    })
     .from(automations)
+    .innerJoin(igAccounts, eq(automations.igAccountId, igAccounts.id))
     .orderBy(desc(automations.createdAt));
 
   return (
@@ -37,6 +47,7 @@ export default async function AutomationsPage() {
             <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
               <tr>
                 <th className="px-4 py-3 font-medium">Nome</th>
+                <th className="px-4 py-3 font-medium">Conta</th>
                 <th className="px-4 py-3 font-medium">Palavra-chave</th>
                 <th className="px-4 py-3 font-medium">Post alvo</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -50,6 +61,9 @@ export default async function AutomationsPage() {
                 <tr key={automation.id}>
                   <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
                     {automation.name}
+                  </td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    {automation.accountUsername ?? automation.accountIgUserId}
                   </td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                     {automation.keyword ?? (

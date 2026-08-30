@@ -23,12 +23,11 @@ export class GraphApiError extends Error {
   }
 }
 
-async function graphApiPost(path: string, params: Record<string, string>) {
-  const accessToken = process.env.META_PAGE_ACCESS_TOKEN;
-  if (!accessToken) {
-    throw new Error("META_PAGE_ACCESS_TOKEN nao esta configurado");
-  }
-
+async function graphApiPost(
+  path: string,
+  accessToken: string,
+  params: Record<string, string>,
+) {
   const body = new URLSearchParams({ ...params, access_token: accessToken });
 
   const res = await fetch(`${GRAPH_API_BASE}/${path}`, {
@@ -49,22 +48,22 @@ async function graphApiPost(path: string, params: Record<string, string>) {
 }
 
 // Private reply a um comentario chega ao usuario como DM no Instagram.
-// Endpoint da Instagram Platform API (Instagram Login): POST /{ig-business-account-id}/messages
-// com recipient.comment_id -- nao confundir com /{comment-id}/private_replies (Messenger Platform
-// legado, nao aplicavel aqui) nem com /{comment-id}/replies (resposta publica, ver postPublicReply).
-export function sendPrivateReply(commentId: string, message: string) {
-  const igBusinessAccountId = process.env.IG_BUSINESS_ACCOUNT_ID;
-  if (!igBusinessAccountId) {
-    throw new Error("IG_BUSINESS_ACCOUNT_ID nao esta configurado");
-  }
-
-  return graphApiPost(`${igBusinessAccountId}/messages`, {
+// Endpoint da Instagram Platform API (Instagram Login): POST /{ig-user-id}/messages
+// com recipient.comment_id -- igUserId e accessToken sao os da conta Instagram dona
+// do comentario (resolvida via ig_accounts), nao ha mais conta/token globais.
+export function sendPrivateReply(
+  accessToken: string,
+  igUserId: string,
+  commentId: string,
+  message: string,
+) {
+  return graphApiPost(`${igUserId}/messages`, accessToken, {
     recipient: JSON.stringify({ comment_id: commentId }),
     message: JSON.stringify({ text: message }),
   });
 }
 
 // Resposta publica visivel no proprio comentario.
-export function postPublicReply(commentId: string, message: string) {
-  return graphApiPost(`${commentId}/replies`, { message });
+export function postPublicReply(accessToken: string, commentId: string, message: string) {
+  return graphApiPost(`${commentId}/replies`, accessToken, { message });
 }

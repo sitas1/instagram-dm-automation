@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const config = {
-  matcher: ["/automations/:path*", "/contacts/:path*", "/activity/:path*"],
+  matcher: [
+    "/automations/:path*",
+    "/contacts/:path*",
+    "/activity/:path*",
+    "/accounts/:path*",
+  ],
 };
 
 async function sha256Hex(value: string): Promise<string> {

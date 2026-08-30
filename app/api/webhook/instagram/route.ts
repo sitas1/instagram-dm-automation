@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import crypto from "node:crypto";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/src/db";
-import { activityLog, automations, contacts } from "@/src/db/schema";
+import { activityLog, automations, contacts, igAccounts } from "@/src/db/schema";
 import { GraphApiError, postPublicReply, sendPrivateReply } from "@/src/lib/instagram";
 import { matchesKeyword } from "@/src/lib/matching";
 
@@ -34,6 +34,7 @@ interface InstagramWebhookPayload {
 
 type Db = ReturnType<typeof getDb>;
 type Automation = typeof automations.$inferSelect;
+type IgAccount = typeof igAccounts.$inferSelect;
 
 interface CommentContext {
   commentId: string;
@@ -106,18 +107,36 @@ async function processWebhookPayload(payload: InstagramWebhookPayload) {
   const db = getDb();
 
   for (const entry of payload.entry ?? []) {
+    // entry.id identifica de qual conta Instagram (das cadastradas em ig_accounts)
+    // veio o evento -- nao existe mais uma conta global fixa.
+    if (!entry.id) continue;
+
+    const [account] = await db
+      .select()
+      .from(igAccounts)
+      .where(eq(igAccounts.igUserId, entry.id))
+      .limit(1);
+
+    if (!account || !account.active) {
+      console.warn(
+        `Webhook Instagram: entry.id ${entry.id} nao corresponde a nenhuma ig_account ativa cadastrada -- evento descartado`,
+      );
+      continue;
+    }
+
     for (const change of entry.changes ?? []) {
       if (change.field !== "comments" || !change.value) continue;
 
       const value = change.value;
       try {
-        await processComment(db, value);
+        await processComment(db, account, value);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const stack = error instanceof Error ? error.stack : undefined;
         console.error("Falha ao processar comentario do webhook Instagram", error);
         try {
           await db.insert(activityLog).values({
+            igAccountId: account.id,
             eventType: "processing_error",
             igCommentId: value.id,
             commentText: (value.text ?? "").slice(0, MAX_COMMENT_TEXT_LENGTH),
@@ -132,7 +151,7 @@ async function processWebhookPayload(payload: InstagramWebhookPayload) {
   }
 }
 
-async function processComment(db: Db, value: InstagramCommentValue) {
+async function processComment(db: Db, account: IgAccount, value: InstagramCommentValue) {
   const commentId = value.id;
   const igUserId = value.from?.id;
   const igUsername = value.from?.username ?? null;
@@ -142,7 +161,7 @@ async function processComment(db: Db, value: InstagramCommentValue) {
   if (!commentId || !igUserId) return;
 
   // evita a automacao responder a comentarios feitos pela propria conta (loop infinito)
-  if (igUserId === process.env.IG_BUSINESS_ACCOUNT_ID) return;
+  if (igUserId === account.igUserId) return;
 
   // ignora respostas aninhadas a outros comentarios
   if (value.parent_id) return;
@@ -152,6 +171,7 @@ async function processComment(db: Db, value: InstagramCommentValue) {
   const [inserted] = await db
     .insert(activityLog)
     .values({
+      igAccountId: account.id,
       eventType: "comment_received",
       igCommentId: commentId,
       commentText,
@@ -170,6 +190,7 @@ async function processComment(db: Db, value: InstagramCommentValue) {
     .from(automations)
     .where(
       and(
+        eq(automations.igAccountId, account.id),
         eq(automations.active, true),
         mediaId
           ? or(isNull(automations.targetMediaId), eq(automations.targetMediaId, mediaId))
@@ -185,21 +206,26 @@ async function processComment(db: Db, value: InstagramCommentValue) {
 
   for (const automation of matchedAutomations) {
     try {
-      await processAutomationMatch(db, automation, ctx);
+      await processAutomationMatch(db, account, automation, ctx);
     } catch (error) {
       console.error("Falha ao processar automation no webhook Instagram", error);
     }
   }
 }
 
-async function processAutomationMatch(db: Db, automation: Automation, ctx: CommentContext) {
+async function processAutomationMatch(
+  db: Db,
+  account: IgAccount,
+  automation: Automation,
+  ctx: CommentContext,
+) {
   const { commentId, commentText, igUserId, igUsername } = ctx;
 
   const [contact] = await db
     .insert(contacts)
-    .values({ igUserId, igUsername })
+    .values({ igAccountId: account.id, igUserId, igUsername })
     .onConflictDoUpdate({
-      target: contacts.igUserId,
+      target: [contacts.igAccountId, contacts.igUserId],
       set: { igUsername },
     })
     .returning();
@@ -219,6 +245,7 @@ async function processAutomationMatch(db: Db, automation: Automation, ctx: Comme
 
     if (previousDm) {
       await db.insert(activityLog).values({
+        igAccountId: account.id,
         automationId: automation.id,
         contactId: contact.id,
         eventType: "cooldown_skipped",
@@ -237,6 +264,7 @@ async function processAutomationMatch(db: Db, automation: Automation, ctx: Comme
         automation.cooldownMinutes - minutesSinceLastContact,
       );
       await db.insert(activityLog).values({
+        igAccountId: account.id,
         automationId: automation.id,
         contactId: contact.id,
         eventType: "cooldown_skipped",
@@ -249,12 +277,21 @@ async function processAutomationMatch(db: Db, automation: Automation, ctx: Comme
   }
 
   try {
-    const result = await sendPrivateReply(commentId, automation.dmMessage);
+    if (!account.accessToken) {
+      throw new Error("Conta Instagram sem access token configurado");
+    }
+    const result = await sendPrivateReply(
+      account.accessToken,
+      account.igUserId,
+      commentId,
+      automation.dmMessage,
+    );
     await db
       .update(contacts)
       .set({ lastContactedAt: new Date() })
       .where(eq(contacts.id, contact.id));
     await db.insert(activityLog).values({
+      igAccountId: account.id,
       automationId: automation.id,
       contactId: contact.id,
       eventType: "dm_sent",
@@ -264,6 +301,7 @@ async function processAutomationMatch(db: Db, automation: Automation, ctx: Comme
     });
   } catch (error) {
     await db.insert(activityLog).values({
+      igAccountId: account.id,
       automationId: automation.id,
       contactId: contact.id,
       eventType: "dm_failed",
@@ -276,8 +314,16 @@ async function processAutomationMatch(db: Db, automation: Automation, ctx: Comme
 
   if (automation.publicReplyMessage) {
     try {
-      const result = await postPublicReply(commentId, automation.publicReplyMessage);
+      if (!account.accessToken) {
+        throw new Error("Conta Instagram sem access token configurado");
+      }
+      const result = await postPublicReply(
+        account.accessToken,
+        commentId,
+        automation.publicReplyMessage,
+      );
       await db.insert(activityLog).values({
+        igAccountId: account.id,
         automationId: automation.id,
         contactId: contact.id,
         eventType: "reply_posted",
@@ -287,6 +333,7 @@ async function processAutomationMatch(db: Db, automation: Automation, ctx: Comme
       });
     } catch (error) {
       await db.insert(activityLog).values({
+        igAccountId: account.id,
         automationId: automation.id,
         contactId: contact.id,
         eventType: "reply_failed",

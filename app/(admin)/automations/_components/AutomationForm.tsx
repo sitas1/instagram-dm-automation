@@ -1,9 +1,11 @@
 import Link from "next/link";
-import type { automations } from "@/src/db/schema";
+import { getDb } from "@/src/db";
+import { automations, igAccounts } from "@/src/db/schema";
+import { Field, SelectField, TextAreaField } from "../../_components/fields";
 
 type Automation = typeof automations.$inferSelect;
 
-export function AutomationForm({
+export async function AutomationForm({
   action,
   automation,
   submitLabel,
@@ -12,8 +14,42 @@ export function AutomationForm({
   automation?: Automation;
   submitLabel: string;
 }) {
+  const db = getDb();
+  const accounts = await db
+    .select({
+      id: igAccounts.id,
+      username: igAccounts.username,
+      igUserId: igAccounts.igUserId,
+    })
+    .from(igAccounts)
+    .orderBy(igAccounts.username);
+
   return (
     <form action={action} className="flex max-w-xl flex-col gap-5">
+      <SelectField
+        label="Conta do Instagram"
+        name="igAccountId"
+        required
+        defaultValue={automation?.igAccountId}
+      >
+        <option value="" disabled>
+          Selecione uma conta
+        </option>
+        {accounts.map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.username ?? account.igUserId}
+          </option>
+        ))}
+      </SelectField>
+      {accounts.length === 0 && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          Nenhuma conta do Instagram cadastrada.{" "}
+          <Link href="/accounts/new" className="underline">
+            Crie uma conta
+          </Link>{" "}
+          antes de criar uma automação.
+        </p>
+      )}
       <Field
         label="Nome"
         name="name"
@@ -89,67 +125,5 @@ export function AutomationForm({
         </Link>
       </div>
     </form>
-  );
-}
-
-function Field({
-  label,
-  name,
-  defaultValue,
-  required,
-  hint,
-  type = "text",
-  min,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string | null;
-  required?: boolean;
-  hint?: string;
-  type?: "text" | "number";
-  min?: number;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-      {label}
-      <input
-        type={type}
-        name={name}
-        defaultValue={defaultValue ?? ""}
-        required={required}
-        min={min}
-        className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal text-zinc-900 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-      />
-      {hint && (
-        <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
-          {hint}
-        </span>
-      )}
-    </label>
-  );
-}
-
-function TextAreaField({
-  label,
-  name,
-  defaultValue,
-  required,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string | null;
-  required?: boolean;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-      {label}
-      <textarea
-        name={name}
-        defaultValue={defaultValue ?? ""}
-        required={required}
-        rows={3}
-        className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal text-zinc-900 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-      />
-    </label>
   );
 }

@@ -1,6 +1,6 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/src/db";
-import { contacts } from "@/src/db/schema";
+import { contacts, igAccounts } from "@/src/db/schema";
 import { formatDateTime } from "../_lib/format";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,17 @@ export const dynamic = "force-dynamic";
 export default async function ContactsPage() {
   const db = getDb();
   const rows = await db
-    .select()
+    .select({
+      id: contacts.id,
+      igUserId: contacts.igUserId,
+      igUsername: contacts.igUsername,
+      firstSeenAt: contacts.firstSeenAt,
+      lastContactedAt: contacts.lastContactedAt,
+      accountUsername: igAccounts.username,
+      accountIgUserId: igAccounts.igUserId,
+    })
     .from(contacts)
+    .innerJoin(igAccounts, eq(contacts.igAccountId, igAccounts.id))
     .orderBy(desc(contacts.firstSeenAt));
 
   return (
@@ -28,6 +37,7 @@ export default async function ContactsPage() {
             <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
               <tr>
                 <th className="px-4 py-3 font-medium">Usuário</th>
+                <th className="px-4 py-3 font-medium">Conta</th>
                 <th className="px-4 py-3 font-medium">IG User ID</th>
                 <th className="px-4 py-3 font-medium">Primeiro contato</th>
                 <th className="px-4 py-3 font-medium">Último contato</th>
@@ -42,6 +52,9 @@ export default async function ContactsPage() {
                         sem username
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    {contact.accountUsername ?? contact.accountIgUserId}
                   </td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                     {contact.igUserId}
