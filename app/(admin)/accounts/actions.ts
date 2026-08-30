@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/src/db";
 import { igAccounts } from "@/src/db/schema";
 
+export type IgAccountActionState = { error?: string };
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -50,8 +52,16 @@ function parseIgAccountInput(formData: FormData) {
   };
 }
 
-export async function createIgAccount(formData: FormData) {
-  const input = parseIgAccountInput(formData);
+export async function createIgAccount(
+  _prevState: IgAccountActionState,
+  formData: FormData,
+): Promise<IgAccountActionState> {
+  let input: ReturnType<typeof parseIgAccountInput>;
+  try {
+    input = parseIgAccountInput(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Dados inválidos." };
+  }
 
   const db = getDb();
   await db.insert(igAccounts).values({
@@ -67,12 +77,21 @@ export async function createIgAccount(formData: FormData) {
   redirect("/accounts");
 }
 
-export async function updateIgAccount(id: string, formData: FormData) {
+export async function updateIgAccount(
+  id: string,
+  _prevState: IgAccountActionState,
+  formData: FormData,
+): Promise<IgAccountActionState> {
   if (!UUID_PATTERN.test(id)) {
-    throw new Error("ID de conta inválido.");
+    return { error: "ID de conta inválido." };
   }
 
-  const input = parseIgAccountInput(formData);
+  let input: ReturnType<typeof parseIgAccountInput>;
+  try {
+    input = parseIgAccountInput(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Dados inválidos." };
+  }
 
   const db = getDb();
   const [updated] = await db
@@ -92,7 +111,7 @@ export async function updateIgAccount(id: string, formData: FormData) {
     .returning({ id: igAccounts.id });
 
   if (!updated) {
-    throw new Error("Conta não encontrada.");
+    return { error: "Conta não encontrada." };
   }
 
   revalidatePath("/accounts");

@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { getDb } from "@/src/db";
 import { igAccounts } from "@/src/db/schema";
+import { PageHeader } from "../../../_components/PageHeader";
 import { IgAccountForm } from "../../_components/IgAccountForm";
 import { updateIgAccount } from "../../actions";
 
@@ -13,7 +14,13 @@ export default async function EditIgAccountPage({
   const { id } = await params;
   const db = getDb();
   const [account] = await db
-    .select()
+    .select({
+      igUserId: igAccounts.igUserId,
+      username: igAccounts.username,
+      active: igAccounts.active,
+      tokenExpiresAt: igAccounts.tokenExpiresAt,
+      hasToken: sql<boolean>`${igAccounts.accessToken} is not null`,
+    })
     .from(igAccounts)
     .where(eq(igAccounts.id, id))
     .limit(1);
@@ -23,12 +30,10 @@ export default async function EditIgAccountPage({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Editar conta do Instagram
-      </h1>
+    <div>
+      <PageHeader title="Editar conta do Instagram" />
       <IgAccountForm
-        action={updateIgAccount.bind(null, account.id)}
+        action={updateIgAccount.bind(null, id)}
         account={account}
         submitLabel="Salvar alterações"
       />

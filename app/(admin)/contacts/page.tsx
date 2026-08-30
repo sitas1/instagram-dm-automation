@@ -1,9 +1,23 @@
 import { desc, eq } from "drizzle-orm";
+import { Users } from "lucide-react";
 import { getDb } from "@/src/db";
 import { contacts, igAccounts } from "@/src/db/schema";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "../_components/PageHeader";
+import { DataCard } from "../_components/DataCard";
+import { EmptyState } from "../_components/EmptyState";
 import { formatDateTime } from "../_lib/format";
 
 export const dynamic = "force-dynamic";
+
+const CONTACTS_LIMIT = 200;
 
 export default async function ContactsPage() {
   const db = getDb();
@@ -19,58 +33,87 @@ export default async function ContactsPage() {
     })
     .from(contacts)
     .innerJoin(igAccounts, eq(contacts.igAccountId, igAccounts.id))
-    .orderBy(desc(contacts.firstSeenAt));
+    .orderBy(desc(contacts.firstSeenAt))
+    .limit(CONTACTS_LIMIT);
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Contacts
-      </h1>
+    <div>
+      <PageHeader
+        title="Contatos"
+        description="Pessoas que já comentaram em posts monitorados pelas automações."
+      />
 
-      {rows.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Nenhum contato registrado ainda.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-              <tr>
-                <th className="px-4 py-3 font-medium">Usuário</th>
-                <th className="px-4 py-3 font-medium">Conta</th>
-                <th className="px-4 py-3 font-medium">IG User ID</th>
-                <th className="px-4 py-3 font-medium">Primeiro contato</th>
-                <th className="px-4 py-3 font-medium">Último contato</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {rows.map((contact) => (
-                <tr key={contact.id}>
-                  <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
-                    {contact.igUsername ?? (
-                      <span className="italic text-zinc-400 dark:text-zinc-600">
-                        sem username
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {contact.accountUsername ?? contact.accountIgUserId}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {contact.igUserId}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {formatDateTime(contact.firstSeenAt)}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {formatDateTime(contact.lastContactedAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataCard>
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="Nenhum contato registrado"
+            description="Contatos aparecem aqui assim que uma automação processar o primeiro comentário."
+          />
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Usuário</TableHead>
+                  <TableHead>Conta</TableHead>
+                  <TableHead>IG User ID</TableHead>
+                  <TableHead>Primeiro contato</TableHead>
+                  <TableHead>Último contato</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((contact) => (
+                  <TableRow key={contact.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-medium text-accent-foreground">
+                          {(contact.igUsername ?? "?")
+                            .charAt(0)
+                            .toUpperCase()}
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {contact.igUsername ? (
+                            `@${contact.igUsername}`
+                          ) : (
+                            <span className="italic text-muted-foreground">
+                              sem username
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {contact.accountUsername
+                        ? `@${contact.accountUsername}`
+                        : contact.accountIgUserId}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {contact.igUserId}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(contact.firstSeenAt)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {contact.lastContactedAt ? (
+                        formatDateTime(contact.lastContactedAt)
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                          Nunca contatado
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+              Mostrando os {Math.min(rows.length, CONTACTS_LIMIT)} contatos
+              mais recentes.
+            </div>
+          </>
+        )}
+      </DataCard>
     </div>
   );
 }

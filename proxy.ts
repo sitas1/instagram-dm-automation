@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const config = {
   matcher: [
+    "/dashboard/:path*",
     "/automations/:path*",
     "/contacts/:path*",
     "/activity/:path*",

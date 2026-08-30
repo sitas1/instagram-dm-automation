@@ -1,115 +1,138 @@
 import Link from "next/link";
-import { desc } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
+import { AtSign, Plus, Pencil } from "lucide-react";
 import { getDb } from "@/src/db";
 import { igAccounts } from "@/src/db/schema";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "../_components/PageHeader";
+import { DataCard } from "../_components/DataCard";
+import { StatusBadge } from "../_components/StatusBadge";
+import { EmptyState } from "../_components/EmptyState";
 import { formatDateTime, getTokenExpiryStatus } from "../_lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
   const db = getDb();
+  // Projeção explícita: nunca selecionar access_token, só um booleano derivado.
   const rows = await db
-    .select()
+    .select({
+      id: igAccounts.id,
+      igUserId: igAccounts.igUserId,
+      username: igAccounts.username,
+      active: igAccounts.active,
+      tokenExpiresAt: igAccounts.tokenExpiresAt,
+      hasToken: sql<boolean>`${igAccounts.accessToken} is not null`,
+    })
     .from(igAccounts)
     .orderBy(desc(igAccounts.createdAt));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Contas do Instagram
-        </h1>
-        <Link
-          href="/accounts/new"
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          Nova conta
-        </Link>
-      </div>
+    <div>
+      <PageHeader
+        title="Contas do Instagram"
+        description="Contas conectadas que recebem comentários e enviam DMs automaticamente."
+        action={
+          <Button asChild size="sm">
+            <Link href="/accounts/new">
+              <Plus className="size-4" />
+              Nova conta
+            </Link>
+          </Button>
+        }
+      />
 
-      {rows.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Nenhuma conta cadastrada ainda.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-              <tr>
-                <th className="px-4 py-3 font-medium">Username</th>
-                <th className="px-4 py-3 font-medium">IG User ID</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Token expira em</th>
-                <th className="px-4 py-3 font-medium">
+      <DataCard>
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={AtSign}
+            title="Nenhuma conta cadastrada"
+            description="Conecte uma conta do Instagram para começar a automatizar respostas."
+            action={
+              <Button asChild size="sm">
+                <Link href="/accounts/new">
+                  <Plus className="size-4" />
+                  Nova conta
+                </Link>
+              </Button>
+            }
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>IG User ID</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Token</TableHead>
+                <TableHead>
                   <span className="sr-only">Ações</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((account) => {
                 const expiryStatus = getTokenExpiryStatus(
-                  account.tokenExpiresAt,
+                  account.tokenExpiresAt
                 );
+
                 return (
-                  <tr key={account.id}>
-                    <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
-                      {account.username ?? (
-                        <span className="italic text-zinc-400 dark:text-zinc-600">
+                  <TableRow key={account.id}>
+                    <TableCell className="font-medium text-foreground">
+                      {account.username ? (
+                        `@${account.username}`
+                      ) : (
+                        <span className="italic text-muted-foreground">
                           sem username
                         </span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {account.igUserId}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={
-                          account.active
-                            ? "rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-400"
-                            : "rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                        }
-                      >
-                        {account.active ? "Ativa" : "Inativa"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {expiryStatus === "none" ? (
-                        <span className="text-zinc-500 dark:text-zinc-400">
-                          —
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        status={account.active ? "active" : "inactive"}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {!account.hasToken && account.active ? (
+                        <StatusBadge status="no-token" />
+                      ) : expiryStatus === "expired" ? (
+                        <StatusBadge status="token-expired" />
+                      ) : expiryStatus === "expiring-soon" ? (
+                        <StatusBadge status="token-expiring" />
+                      ) : account.tokenExpiresAt ? (
+                        <span className="text-muted-foreground">
+                          {formatDateTime(account.tokenExpiresAt)}
                         </span>
                       ) : (
-                        <span
-                          className={
-                            expiryStatus === "expired"
-                              ? "font-medium text-red-600 dark:text-red-400"
-                              : expiryStatus === "expiring-soon"
-                                ? "font-medium text-amber-600 dark:text-amber-400"
-                                : "text-zinc-600 dark:text-zinc-400"
-                          }
-                        >
-                          {formatDateTime(account.tokenExpiresAt)}
-                          {expiryStatus === "expired" && " (expirado)"}
-                          {expiryStatus === "expiring-soon" &&
-                            " (expira em breve)"}
-                        </span>
+                        <span className="text-muted-foreground">—</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/accounts/${account.id}/edit`}
-                        className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-                      >
-                        Editar
-                      </Link>
-                    </td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/accounts/${account.id}/edit`}>
+                          <Pencil className="size-3.5" />
+                          Editar
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </TableBody>
+          </Table>
+        )}
+      </DataCard>
     </div>
   );
 }

@@ -1,8 +1,23 @@
 import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
+import { Zap, Plus, Pencil } from "lucide-react";
 import { getDb } from "@/src/db";
 import { automations, igAccounts } from "@/src/db/schema";
 import { toggleAutomationActive } from "./actions";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "../_components/PageHeader";
+import { DataCard } from "../_components/DataCard";
+import { EmptyState } from "../_components/EmptyState";
+import { cn } from "@/lib/utils";
+import { formatCooldown } from "../_lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +31,8 @@ export default async function AutomationsPage() {
       targetMediaId: automations.targetMediaId,
       targetMediaCaption: automations.targetMediaCaption,
       active: automations.active,
+      cooldownMinutes: automations.cooldownMinutes,
+      oncePerContact: automations.oncePerContact,
       accountUsername: igAccounts.username,
       accountIgUserId: igAccounts.igUserId,
     })
@@ -24,99 +41,133 @@ export default async function AutomationsPage() {
     .orderBy(desc(automations.createdAt));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Automations
-        </h1>
-        <Link
-          href="/automations/new"
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          Nova automação
-        </Link>
-      </div>
+    <div>
+      <PageHeader
+        title="Automações"
+        description="Regras que transformam comentários em DMs automáticas."
+        action={
+          <Button asChild size="sm">
+            <Link href="/automations/new">
+              <Plus className="size-4" />
+              Nova automação
+            </Link>
+          </Button>
+        }
+      />
 
-      {rows.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Nenhuma automação cadastrada ainda.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-              <tr>
-                <th className="px-4 py-3 font-medium">Nome</th>
-                <th className="px-4 py-3 font-medium">Conta</th>
-                <th className="px-4 py-3 font-medium">Palavra-chave</th>
-                <th className="px-4 py-3 font-medium">Post alvo</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">
+      <DataCard>
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={Zap}
+            title="Nenhuma automação cadastrada"
+            description="Crie uma automação para responder comentários automaticamente."
+            action={
+              <Button asChild size="sm">
+                <Link href="/automations/new">
+                  <Plus className="size-4" />
+                  Nova automação
+                </Link>
+              </Button>
+            }
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Conta</TableHead>
+                <TableHead>Gatilho</TableHead>
+                <TableHead>Limites</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>
                   <span className="sr-only">Ações</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((automation) => (
-                <tr key={automation.id}>
-                  <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
+                <TableRow key={automation.id}>
+                  <TableCell className="font-medium text-foreground">
                     {automation.name}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {automation.accountUsername ?? automation.accountIgUserId}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {automation.keyword ?? (
-                      <span className="italic text-zinc-400 dark:text-zinc-600">
-                        qualquer comentário
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {automation.accountUsername
+                      ? `@${automation.accountUsername}`
+                      : automation.accountIgUserId}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        {automation.keyword ?? (
+                          <span className="italic text-muted-foreground/70">
+                            qualquer comentário
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {automation.targetMediaCaption ? (
-                      truncate(automation.targetMediaCaption, 40)
-                    ) : automation.targetMediaId ? (
-                      automation.targetMediaId
-                    ) : (
-                      <span className="italic text-zinc-400 dark:text-zinc-600">
-                        qualquer post
+                      <span className="text-xs text-muted-foreground/70">
+                        {automation.targetMediaCaption
+                          ? truncate(automation.targetMediaCaption, 40)
+                          : automation.targetMediaId
+                            ? automation.targetMediaId
+                            : "qualquer post"}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs">
+                        {formatCooldown(automation.cooldownMinutes)}
+                      </span>
+                      {automation.oncePerContact && (
+                        <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+                          1× por contato
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <form
                       action={toggleAutomationActive.bind(
                         null,
                         automation.id,
-                        !automation.active,
+                        !automation.active
                       )}
                     >
                       <button
                         type="submit"
-                        className={
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium outline-none ring-1 ring-inset transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                           automation.active
-                            ? "rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-400"
-                            : "rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
-                        }
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
+                            : "bg-slate-100 text-slate-700 ring-slate-200 hover:bg-slate-200"
+                        )}
                       >
-                        {automation.active ? "Ativa" : "Inativa"}
+                        <span
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            automation.active
+                              ? "bg-emerald-500"
+                              : "bg-slate-400"
+                          )}
+                        />
+                        {automation.active ? "Ativa" : "Pausada"}
                       </button>
                     </form>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/automations/${automation.id}/edit`}
-                      className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-                    >
-                      Editar
-                    </Link>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/automations/${automation.id}/edit`}>
+                        <Pencil className="size-3.5" />
+                        Editar
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </TableBody>
+          </Table>
+        )}
+      </DataCard>
     </div>
   );
 }

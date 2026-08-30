@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/src/db";
 import { automations } from "@/src/db/schema";
 
+export type AutomationActionState = { error?: string };
+
 const MEDIA_ID_PATTERN = /^\d+$/;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -82,8 +84,16 @@ function parseAutomationInput(formData: FormData) {
   };
 }
 
-export async function createAutomation(formData: FormData) {
-  const input = parseAutomationInput(formData);
+export async function createAutomation(
+  _prevState: AutomationActionState,
+  formData: FormData,
+): Promise<AutomationActionState> {
+  let input: ReturnType<typeof parseAutomationInput>;
+  try {
+    input = parseAutomationInput(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Dados inválidos." };
+  }
 
   const db = getDb();
   await db.insert(automations).values(input);
@@ -92,12 +102,21 @@ export async function createAutomation(formData: FormData) {
   redirect("/automations");
 }
 
-export async function updateAutomation(id: string, formData: FormData) {
+export async function updateAutomation(
+  id: string,
+  _prevState: AutomationActionState,
+  formData: FormData,
+): Promise<AutomationActionState> {
   if (!UUID_PATTERN.test(id)) {
-    throw new Error("ID de automação inválido.");
+    return { error: "ID de automação inválido." };
   }
 
-  const input = parseAutomationInput(formData);
+  let input: ReturnType<typeof parseAutomationInput>;
+  try {
+    input = parseAutomationInput(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Dados inválidos." };
+  }
 
   const db = getDb();
 
@@ -108,11 +127,11 @@ export async function updateAutomation(id: string, formData: FormData) {
     .limit(1);
 
   if (!existing) {
-    throw new Error("Automação não encontrada.");
+    return { error: "Automação não encontrada." };
   }
 
   if (existing.igAccountId !== input.igAccountId) {
-    throw new Error("Não é possível trocar a conta de uma automação existente.");
+    return { error: "Não é possível trocar a conta de uma automação existente." };
   }
 
   await db
