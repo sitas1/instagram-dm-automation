@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "conta nao encontrada ou sem token" }, { status: 404 });
   }
   const res = await fetch(
-    `https://graph.instagram.com/v21.0/me/subscribed_apps?subscribed_fields=comments,mentions,messages&access_token=${encodeURIComponent(account.accessToken)}`,
+    `https://graph.facebook.com/v21.0/${account.igUserId}/subscribed_apps?subscribed_fields=comments,mentions,messages&access_token=${encodeURIComponent(account.accessToken)}`,
     { method: "POST" },
   );
   const data = await res.json().catch(() => null);
