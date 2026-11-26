@@ -276,6 +276,36 @@ async function processAutomationMatch(
     }
   }
 
+  // Modo Muse: dmMessage "__MUSE__" nao envia texto fixo. Emite o evento para a
+  // ponte do Muse (n8n), que le o perfil, compoe a DM personalizada e envia
+  // depois via POST /api/muse/send.
+  if (automation.dmMessage === "__MUSE__") {
+    if (process.env.MUSE_WEBHOOK_URL) {
+      await fetch(process.env.MUSE_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.igUserId,
+          igUserId,
+          username: igUsername ?? "",
+          commentId,
+          commentText,
+          mediaId: "",
+          automationId: automation.id,
+        }),
+      }).catch((error) => console.error("Falha ao emitir evento para o Muse", error));
+    }
+    await db.insert(activityLog).values({
+      igAccountId: account.id,
+      automationId: automation.id,
+      contactId: contact.id,
+      eventType: "comment_received",
+      igCommentId: commentId,
+      commentText,
+      detail: "muse_pending",
+    }).catch(() => undefined);
+    return;
+  }
   try {
     if (!account.accessToken) {
       throw new Error("Conta Instagram sem access token configurado");
